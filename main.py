@@ -1,5 +1,6 @@
 import pygame
 import os
+import math  # rotation ke liye
 
 pygame.init()
 pygame.mixer.init(frequency=22050, size=-16, channels=2, buffer=512)
@@ -29,10 +30,9 @@ HAMMER_IMG = pygame.image.load(
 
 # --- LOAD SOUNDS -------------------------------------------------------------
 DRAWER_SOUND = pygame.mixer.Sound(os.path.join("assets", "images", "drowerOpenSound.mp3"))
-DOOR_KNOCK_SOUND = pygame.mixer.Sound(os.path.join("assets", "images", "doorKnowking1.mp3"))
+DOOR_KNOCK_SOUND = pygame.mixer.Sound(os.path.join("assets", "images", "doorKnowking2.mp3"))
 HORROR_SOUND = pygame.mixer.Sound(os.path.join("assets", "images", "horror.mp3"))
 
-# Set volumes
 DRAWER_SOUND.set_volume(0.6)
 DOOR_KNOCK_SOUND.set_volume(0.7)
 HORROR_SOUND.set_volume(0.3)
@@ -47,9 +47,12 @@ RIGHT_DOOR_RECT = pygame.Rect(930, 230, 140, 280)
 INVENTORY_AREA_X = ROOM_WIDTH
 INVENTORY_SLOT_RECT = pygame.Rect(INVENTORY_AREA_X + 60, 80, 80, 80)
 
-KEYPAD_RECT = pygame.Rect(160, 260, 60, 80) 
+KEYPAD_RECT = pygame.Rect(160, 260, 60, 80)
 
-# --- SCALE SPRITES TO FIT THEIR RECTS --------------------------------------
+# Restart icon area (top-left chhota square)
+RESTART_RECT = pygame.Rect(10, 10, 40, 40)
+
+# --- SCALE SPRITES ----------------------------------------------------------
 DRAWER_OPEN_IMG = pygame.transform.scale(
     DRAWER_OPEN_IMG, (DRAWER_RECT.width, DRAWER_RECT.height)
 )
@@ -58,9 +61,26 @@ HAMMER_IMG = pygame.transform.scale(
 )
 
 # --- GAME STATE -------------------------------------------------------------
+def reset_game():
+    global drawer_open, hammer_taken, left_door_locked, message, message_timer
+    global selected_item, keypad_active, current_code, door_just_touched
+    global restart_rotating, restart_angle, restart_frames
+
+    drawer_open = False
+    hammer_taken = False
+    left_door_locked = True
+    message = ""
+    message_timer = 0
+    selected_item = None
+    keypad_active = False
+    current_code = ""
+    door_just_touched = False
+    restart_rotating = False
+    restart_angle = 0
+    restart_frames = 0
+
 drawer_open = False
 hammer_taken = False
-
 left_door_locked = True
 
 message = ""
@@ -69,22 +89,22 @@ message_timer = 0
 FONT = pygame.font.SysFont(None, 32)
 FONT_SMALL = pygame.font.SysFont(None, 24)
 
-# Inventory selection
-selected_item = None 
-
-# Keypad / code input state
+selected_item = None
 keypad_active = False
 current_code = ""
 CODE_LENGTH = 4
 CORRECT_CODE = "1234"
 
-# Sound states
-horror_playing = False
-door_just_touched = False  # Track single door knock
+door_just_touched = False
+
+# Restart animation state
+restart_rotating = False
+restart_angle = 0        # degrees
+restart_frames = 0       # kitne frame se rotate ho raha hai
 
 # --- HELPERS ----------------------------------------------------------------
 def stop_foreground_sounds():
-    """Stop drawer and door knock, but keep horror background"""
+    """Drawer / knock band karo, horror bg chalta rahe."""
     global door_just_touched
     DOOR_KNOCK_SOUND.stop()
     door_just_touched = False
@@ -94,9 +114,8 @@ def set_message(text, frames=120):
     message = text
     message_timer = frames
 
-# START BACKGROUND MUSIC IMMEDIATELY
-HORROR_SOUND.play(loops=-1)  # Continuous loop from start
-horror_playing = True
+# Background horror music continuous
+HORROR_SOUND.play(loops=-1)
 
 # --- INPUT LOGIC ------------------------------------------------------------
 def handle_keydown(event):
@@ -129,30 +148,44 @@ def handle_keydown(event):
 
 def handle_click(pos):
     global drawer_open, hammer_taken, selected_item, keypad_active, door_just_touched
+    global restart_rotating, restart_angle, restart_frames
 
     x, y = pos
 
-    # Click in room area
+    # --- Restart icon click -------------------------------------------------
+    if RESTART_RECT.collidepoint(pos):
+        stop_foreground_sounds()
+        reset_game()
+        set_message("Game Restarted!", 120)
+
+        # rotation animation start
+        restart_rotating = True
+        restart_angle = 0
+        restart_frames = 0
+        return
+    # ------------------------------------------------------------------------
+
+    # Room area
     if x < ROOM_WIDTH:
-        # 1) Hammer click (in drawer)
+        # Hammer click
         if drawer_open and not hammer_taken and HAMMER_RECT.collidepoint(pos):
             hammer_taken = True
             stop_foreground_sounds()
             set_message("Picked up hammer.", 120)
             return
 
-        # 2) Drawer click
+        # Drawer click
         if DRAWER_RECT.collidepoint(pos):
             stop_foreground_sounds()
             drawer_open = not drawer_open
-            DRAWER_SOUND.play()  # Play once
+            DRAWER_SOUND.play()
             set_message("Drawer opened." if drawer_open else "Drawer closed.", 60)
             return
 
-        # 3) Left door click - KNOCK ONLY ONCE
+        # Left door click
         if LEFT_DOOR_RECT.collidepoint(pos):
-            if not door_just_touched:  # Play knock ONLY if not just played
-                DOOR_KNOCK_SOUND.play()  # Play ONCE only
+            if not door_just_touched:
+                DOOR_KNOCK_SOUND.play()
                 door_just_touched = True
             if left_door_locked:
                 set_message("The door is locked.", 120)
@@ -160,21 +193,21 @@ def handle_click(pos):
                 set_message("You opened the door!", 120)
             return
 
-        # 4) Right door click - KNOCK ONLY ONCE
+        # Right door click
         if RIGHT_DOOR_RECT.collidepoint(pos):
-            if not door_just_touched:  # Play knock ONLY if not just played
-                DOOR_KNOCK_SOUND.play()  # Play ONCE only
+            if not door_just_touched:
+                DOOR_KNOCK_SOUND.play()
                 door_just_touched = True
             set_message("The door is locked.", 120)
             return
 
-        # 5) Keypad panel click
+        # Keypad click
         if KEYPAD_RECT.collidepoint(pos):
             stop_foreground_sounds()
             keypad_active = True
             return
 
-    # Click in inventory area
+    # Inventory area
     else:
         if hammer_taken and INVENTORY_SLOT_RECT.collidepoint(pos):
             stop_foreground_sounds()
@@ -189,15 +222,73 @@ def handle_click(pos):
 # --- DRAW -------------------------------------------------------------------
 def draw():
     global message_timer, door_just_touched
+    global restart_rotating, restart_angle, restart_frames
 
     screen.fill((0, 0, 0))
     screen.blit(room_bg, (0, 0))
 
-    # Reset door touch after short delay (visual feedback only)
     if door_just_touched:
-        door_just_touched = False  # Reset for next click
+        door_just_touched = False
 
-    # Debug outlines
+    # --- Restart symbol (rotating) -----------------------------------------
+    cx = RESTART_RECT.x + RESTART_RECT.width // 2
+    cy = RESTART_RECT.y + RESTART_RECT.height // 2
+    center = (cx, cy)
+
+    radius_outer = 16
+    thickness = 4
+
+    # rotation update
+    if restart_rotating:
+        restart_angle += 20      # speed (degree per frame)
+        restart_frames += 1
+        # kitni der ghoomega (yahan ~360*2 / 20 = 36 frames, lagbhag 2 turn)
+        if restart_frames > 36:
+            restart_rotating = False
+            restart_angle = 0
+
+    base_start = 60
+    base_end = 330
+    start_angle = math.radians(base_start + restart_angle)
+    end_angle = math.radians(base_end + restart_angle)
+
+    arc_rect = pygame.Rect(
+        cx - radius_outer,
+        cy - radius_outer,
+        radius_outer * 2,
+        radius_outer * 2
+    )
+
+    pygame.draw.arc(
+        screen,
+        (255, 255, 255),
+        arc_rect,
+        start_angle,
+        end_angle,
+        thickness
+    )
+
+    # Arrow head, same rotation ke sath
+    head_angle_deg = base_start + restart_angle
+    head_angle = math.radians(head_angle_deg)
+    tip_x = cx + radius_outer * math.cos(head_angle)
+    tip_y = cy + radius_outer * math.sin(head_angle)
+
+    arrow_len = 10
+    # tangent-like direction
+    dir_angle = head_angle - math.radians(30)
+    ax = arrow_len * math.cos(dir_angle)
+    ay = arrow_len * math.sin(dir_angle)
+
+    arrow_points = [
+        (tip_x, tip_y),
+        (tip_x - ax - ay/3, tip_y - ay + ax/3),
+        (tip_x - ax + ay/3, tip_y - ay - ax/3),
+    ]
+    pygame.draw.polygon(screen, (255, 255, 255), arrow_points)
+    # ------------------------------------------------------------------------
+
+    # Debug outlines (chahe to hata sakti ho)
     pygame.draw.rect(screen, (255, 0, 0), DRAWER_RECT, 2)
     pygame.draw.rect(screen, (0, 255, 0), LEFT_DOOR_RECT, 2)
     pygame.draw.rect(screen, (0, 0, 255), RIGHT_DOOR_RECT, 2)
@@ -217,7 +308,7 @@ def draw():
     inv_text = FONT.render("Inventory", True, (255, 255, 255))
     screen.blit(inv_text, (INVENTORY_AREA_X + 40, 30))
 
-    # Inventory slot border
+    # Inventory slot
     if selected_item == "hammer":
         border_color = (255, 255, 0)
         border_width = 4
@@ -227,11 +318,10 @@ def draw():
 
     pygame.draw.rect(screen, border_color, INVENTORY_SLOT_RECT, border_width)
 
-    # Hammer in inventory
     if hammer_taken:
         inv_hammer = pygame.transform.scale(
             HAMMER_IMG,
-            (INVENTORY_SLOT_RECT.width - 20, INVENTORY_SLOT_HEIGHT := INVENTORY_SLOT_RECT.height - 20)
+            (INVENTORY_SLOT_RECT.width - 20, INVENTORY_SLOT_RECT.height - 20)
         )
         screen.blit(inv_hammer, INVENTORY_SLOT_RECT.inflate(-20, -20).topleft)
 
@@ -263,7 +353,7 @@ def draw():
         sel_text = FONT_SMALL.render(f"Selected: {selected_item}", True, (255, 255, 0))
         screen.blit(sel_text, (INVENTORY_AREA_X + 20, 170))
 
-    # Message at bottom
+    # Message bottom
     if message and message_timer > 0:
         msg_surf = FONT.render(message, True, (255, 255, 255))
         screen.blit(msg_surf, (40, SCREEN_HEIGHT - 40))
@@ -275,6 +365,7 @@ while running:
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             DOOR_KNOCK_SOUND.stop()
+            HORROR_SOUND.stop()
             running = False
         elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             handle_click(event.pos)
