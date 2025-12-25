@@ -29,7 +29,7 @@ HAMMER_IMG = pygame.image.load(
 
 # --- LOAD SOUNDS -------------------------------------------------------------
 DRAWER_SOUND = pygame.mixer.Sound(os.path.join("assets", "images", "drowerOpenSound.mp3"))
-DOOR_KNOCK_SOUND = pygame.mixer.Sound(os.path.join("assets", "images", "doorKnowking.mp3"))
+DOOR_KNOCK_SOUND = pygame.mixer.Sound(os.path.join("assets", "images", "doorKnowking1.mp3"))
 HORROR_SOUND = pygame.mixer.Sound(os.path.join("assets", "images", "horror.mp3"))
 
 # Set volumes
