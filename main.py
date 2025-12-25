@@ -2,9 +2,9 @@ import pygame
 import os
 
 pygame.init()
+pygame.mixer.init(frequency=22050, size=-16, channels=2, buffer=512)
 
 # --- CONFIG -----------------------------------------------------------------
-
 ROOM_WIDTH, ROOM_HEIGHT = 1152, 768
 INVENTORY_WIDTH = 200
 
@@ -14,13 +14,11 @@ pygame.display.set_caption("Mystery Room")
 clock = pygame.time.Clock()
 
 # --- LOAD BACKGROUND --------------------------------------------------------
-
 BG_PATH = os.path.join("assets", "images", "room.png")
 room_bg_raw = pygame.image.load(BG_PATH).convert()
 room_bg = pygame.transform.scale(room_bg_raw, (ROOM_WIDTH, ROOM_HEIGHT))
 
 # --- LOAD SPRITES -----------------------------------------------------------
-
 DRAWER_OPEN_IMG = pygame.image.load(
     os.path.join("assets", "images", "drawer.png")
 ).convert_alpha()
@@ -29,8 +27,17 @@ HAMMER_IMG = pygame.image.load(
     os.path.join("assets", "images", "hammer.png")
 ).convert_alpha()
 
-# --- INTERACTIVE OBJECTS (RECTS) -------------------------------------------
+# --- LOAD SOUNDS -------------------------------------------------------------
+DRAWER_SOUND = pygame.mixer.Sound(os.path.join("assets", "images", "drowerOpenSound.mp3"))
+DOOR_KNOCK_SOUND = pygame.mixer.Sound(os.path.join("assets", "images", "doorKnowking.mp3"))
+HORROR_SOUND = pygame.mixer.Sound(os.path.join("assets", "images", "horror.mp3"))
 
+# Set volumes
+DRAWER_SOUND.set_volume(0.6)
+DOOR_KNOCK_SOUND.set_volume(0.7)
+HORROR_SOUND.set_volume(0.3)
+
+# --- INTERACTIVE OBJECTS (RECTS) -------------------------------------------
 DRAWER_RECT = pygame.Rect(550, 370, 140, 100)
 HAMMER_RECT = pygame.Rect(590, 400, 40, 20)
 
@@ -43,7 +50,6 @@ INVENTORY_SLOT_RECT = pygame.Rect(INVENTORY_AREA_X + 60, 80, 80, 80)
 KEYPAD_RECT = pygame.Rect(160, 260, 60, 80) 
 
 # --- SCALE SPRITES TO FIT THEIR RECTS --------------------------------------
-
 DRAWER_OPEN_IMG = pygame.transform.scale(
     DRAWER_OPEN_IMG, (DRAWER_RECT.width, DRAWER_RECT.height)
 )
@@ -52,7 +58,6 @@ HAMMER_IMG = pygame.transform.scale(
 )
 
 # --- GAME STATE -------------------------------------------------------------
-
 drawer_open = False
 hammer_taken = False
 
@@ -73,36 +78,43 @@ current_code = ""
 CODE_LENGTH = 4
 CORRECT_CODE = "1234"
 
+# Sound states
+horror_playing = False
+door_just_touched = False  # Track single door knock
 
 # --- HELPERS ----------------------------------------------------------------
+def stop_foreground_sounds():
+    """Stop drawer and door knock, but keep horror background"""
+    global door_just_touched
+    DOOR_KNOCK_SOUND.stop()
+    door_just_touched = False
 
 def set_message(text, frames=120):
     global message, message_timer
     message = text
     message_timer = frames
 
+# START BACKGROUND MUSIC IMMEDIATELY
+HORROR_SOUND.play(loops=-1)  # Continuous loop from start
+horror_playing = True
 
 # --- INPUT LOGIC ------------------------------------------------------------
-
 def handle_keydown(event):
     global current_code, keypad_active, left_door_locked
 
     if not keypad_active:
         return
 
-    # number keys 0–9
     if event.key in (pygame.K_0, pygame.K_1, pygame.K_2, pygame.K_3,
                      pygame.K_4, pygame.K_5, pygame.K_6, pygame.K_7,
                      pygame.K_8, pygame.K_9):
         if len(current_code) < CODE_LENGTH:
-            digit = event.unicode  # "0" .. "9"
+            digit = event.unicode
             current_code += digit
 
-    # backspace to delete
     elif event.key == pygame.K_BACKSPACE:
         current_code = current_code[:-1]
 
-    # Enter to submit code
     elif event.key == pygame.K_RETURN:
         if len(current_code) == CODE_LENGTH:
             if current_code == CORRECT_CODE:
@@ -115,9 +127,8 @@ def handle_keydown(event):
         current_code = ""
         keypad_active = False
 
-
 def handle_click(pos):
-    global drawer_open, hammer_taken, selected_item, keypad_active
+    global drawer_open, hammer_taken, selected_item, keypad_active, door_just_touched
 
     x, y = pos
 
@@ -126,40 +137,47 @@ def handle_click(pos):
         # 1) Hammer click (in drawer)
         if drawer_open and not hammer_taken and HAMMER_RECT.collidepoint(pos):
             hammer_taken = True
+            stop_foreground_sounds()
             set_message("Picked up hammer.", 120)
             return
 
         # 2) Drawer click
         if DRAWER_RECT.collidepoint(pos):
+            stop_foreground_sounds()
             drawer_open = not drawer_open
+            DRAWER_SOUND.play()  # Play once
             set_message("Drawer opened." if drawer_open else "Drawer closed.", 60)
             return
 
-        # 3) Left door click
+        # 3) Left door click - KNOCK ONLY ONCE
         if LEFT_DOOR_RECT.collidepoint(pos):
+            if not door_just_touched:  # Play knock ONLY if not just played
+                DOOR_KNOCK_SOUND.play()  # Play ONCE only
+                door_just_touched = True
             if left_door_locked:
                 set_message("The door is locked.", 120)
             else:
                 set_message("You opened the door!", 120)
             return
 
-        # 4) Right door click
+        # 4) Right door click - KNOCK ONLY ONCE
         if RIGHT_DOOR_RECT.collidepoint(pos):
+            if not door_just_touched:  # Play knock ONLY if not just played
+                DOOR_KNOCK_SOUND.play()  # Play ONCE only
+                door_just_touched = True
             set_message("The door is locked.", 120)
             return
 
-        # 5) Keypad panel click (activate input)
+        # 5) Keypad panel click
         if KEYPAD_RECT.collidepoint(pos):
+            stop_foreground_sounds()
             keypad_active = True
-            # Reset any previous input
-            # Do not clear message so player sees feedback
             return
 
     # Click in inventory area
     else:
-        # For now we only have hammer
         if hammer_taken and INVENTORY_SLOT_RECT.collidepoint(pos):
-            # Toggle selection
+            stop_foreground_sounds()
             if selected_item == "hammer":
                 selected_item = None
                 set_message("Deselected hammer.", 60)
@@ -168,16 +186,18 @@ def handle_click(pos):
                 set_message("Selected hammer.", 60)
         return
 
-
 # --- DRAW -------------------------------------------------------------------
-
 def draw():
-    global message_timer
+    global message_timer, door_just_touched
 
     screen.fill((0, 0, 0))
     screen.blit(room_bg, (0, 0))
 
-    # Debug outlines (keep while tuning positions)
+    # Reset door touch after short delay (visual feedback only)
+    if door_just_touched:
+        door_just_touched = False  # Reset for next click
+
+    # Debug outlines
     pygame.draw.rect(screen, (255, 0, 0), DRAWER_RECT, 2)
     pygame.draw.rect(screen, (0, 255, 0), LEFT_DOOR_RECT, 2)
     pygame.draw.rect(screen, (0, 0, 255), RIGHT_DOOR_RECT, 2)
@@ -197,9 +217,9 @@ def draw():
     inv_text = FONT.render("Inventory", True, (255, 255, 255))
     screen.blit(inv_text, (INVENTORY_AREA_X + 40, 30))
 
-    # Inventory slot border (highlight if selected)
+    # Inventory slot border
     if selected_item == "hammer":
-        border_color = (255, 255, 0)  # yellow highlight
+        border_color = (255, 255, 0)
         border_width = 4
     else:
         border_color = (100, 100, 100)
@@ -215,7 +235,7 @@ def draw():
         )
         screen.blit(inv_hammer, INVENTORY_SLOT_RECT.inflate(-20, -20).topleft)
 
-    # Keypad UI (bottom center when active)
+    # Keypad UI
     if keypad_active:
         panel_width, panel_height = 260, 80
         panel_rect = pygame.Rect(
@@ -230,7 +250,6 @@ def draw():
         prompt = FONT_SMALL.render("Enter 4-digit code:", True, (255, 255, 255))
         screen.blit(prompt, (panel_rect.x + 10, panel_rect.y + 10))
 
-        # Draw code box
         box_rect = pygame.Rect(panel_rect.x + 10, panel_rect.y + 35, panel_width - 20, 30)
         pygame.draw.rect(screen, (0, 0, 0), box_rect, 0)
         pygame.draw.rect(screen, (200, 200, 200), box_rect, 1)
@@ -250,13 +269,12 @@ def draw():
         screen.blit(msg_surf, (40, SCREEN_HEIGHT - 40))
         message_timer -= 1
 
-
 # --- MAIN LOOP --------------------------------------------------------------
-
 running = True
 while running:
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
+            DOOR_KNOCK_SOUND.stop()
             running = False
         elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             handle_click(event.pos)
