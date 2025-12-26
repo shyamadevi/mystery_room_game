@@ -1,6 +1,8 @@
 import pygame
 import os
 import math  # rotation ke liye
+import cv2
+import os
 
 pygame.init()
 pygame.mixer.init(frequency=22050, size=-16, channels=2, buffer=512)
@@ -8,6 +10,19 @@ pygame.mixer.init(frequency=22050, size=-16, channels=2, buffer=512)
 # --- CONFIG -----------------------------------------------------------------
 ROOM_WIDTH, ROOM_HEIGHT = 1152, 768
 INVENTORY_WIDTH = 200
+#tv 
+TV_RECT = pygame.Rect(665, 255, 220, 155)
+# TV frame position (outer)
+TV_FRAME_RECT = pygame.Rect(635, 255, 240, 180)
+
+
+# Actual screen inside TV (inner)
+TV_SCREEN_RECT = pygame.Rect(680, 285, 150, 115)
+
+
+
+TV_TILT_ANGLE = -2
+  # negative = tilt left, positive = tilt right
 
 SCREEN_WIDTH, SCREEN_HEIGHT = ROOM_WIDTH + INVENTORY_WIDTH, ROOM_HEIGHT
 screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
@@ -27,6 +42,19 @@ DRAWER_OPEN_IMG = pygame.image.load(
 HAMMER_IMG = pygame.image.load(
     os.path.join("assets", "images", "hammer.png")
 ).convert_alpha()
+
+#---LOAD TV FRAMES --------------------------------------------------------
+tv_frame = pygame.image.load(
+    os.path.join("assets", "images", "tv_frame.png")
+).convert_alpha()
+
+tv_frame = pygame.transform.scale(tv_frame, TV_FRAME_RECT.size)
+
+
+#LOAD VIDEO
+video = cv2.VideoCapture(
+    os.path.join("assets", "videos", "tv.mp4")
+)
 
 # --- LOAD SOUNDS -------------------------------------------------------------
 DRAWER_SOUND = pygame.mixer.Sound(os.path.join("assets", "images", "drowerOpenSound.mp3"))
@@ -226,6 +254,8 @@ def draw():
 
     screen.fill((0, 0, 0))
     screen.blit(room_bg, (0, 0))
+    draw_tv()
+    pygame.display.flip()
 
     if door_just_touched:
         door_just_touched = False
@@ -358,6 +388,35 @@ def draw():
         msg_surf = FONT.render(message, True, (255, 255, 255))
         screen.blit(msg_surf, (40, SCREEN_HEIGHT - 40))
         message_timer -= 1
+
+
+#tv frame
+def draw_tv():
+    ret, frame = video.read()
+    if not ret:
+        video.set(cv2.CAP_PROP_POS_FRAMES, 0)
+        ret, frame = video.read()
+
+    # Convert OpenCV → pygame
+    frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    frame = cv2.resize(frame, TV_SCREEN_RECT.size)
+    frame = frame.swapaxes(0, 1)
+
+    video_surface = pygame.surfarray.make_surface(frame)
+
+    # Rotate slightly
+    video_surface = pygame.transform.rotozoom(video_surface, TV_TILT_ANGLE, 1)
+    frame_surface = pygame.transform.rotozoom(tv_frame, TV_TILT_ANGLE, 1)
+
+    # Correct centering
+    video_rect = video_surface.get_rect(center=TV_SCREEN_RECT.center)
+    frame_rect = frame_surface.get_rect(center=TV_FRAME_RECT.center)
+
+    # Draw order
+    screen.blit(video_surface, video_rect)
+    screen.blit(frame_surface, frame_rect)
+
+
 
 # --- MAIN LOOP --------------------------------------------------------------
 running = True
