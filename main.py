@@ -1,13 +1,9 @@
 import pygame
 import os
 import math 
-<<<<<<< HEAD
 import cv2
 import subprocess
 
-=======
-#import cv2
->>>>>>> 0819ff02e687296d4ebba3144eed78610374de84
 
 pygame.init()
 pygame.mixer.init(frequency=22050, size=-16, channels=2, buffer=512)
