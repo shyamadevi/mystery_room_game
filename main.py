@@ -2,6 +2,8 @@ import pygame
 import os
 import math 
 import cv2
+import subprocess
+
 
 pygame.init()
 pygame.mixer.init(frequency=22050, size=-16, channels=2, buffer=512)
@@ -170,8 +172,13 @@ def handle_otp_keydown(event):
                 if code == CORRECT_CODE:
                     tv_state = "UNLOCKED"
                     set_message("TV unlocked 📺", 180)
+
+                    # ▶ RUN SUDOKU ONLY ONCE
+                    subprocess.Popen(["python", "sudoku.py"])
+
                 else:
                     set_message("Wrong TV PIN ❌", 120)
+
 
         # reset after submit
         otp_digits = ["", "", "", ""]
