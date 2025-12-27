@@ -11,6 +11,14 @@ ROOM_WIDTH, ROOM_HEIGHT = 1152, 768
 INVENTORY_WIDTH = 200
 INVENTORY_AREA_X = ROOM_WIDTH
 
+pin_mode = None  
+# can be: None, "DOOR", "TV"
+tv_state = "OFF"
+# possible values: "OFF", "IMAGE", "PIN", "UNLOCKED"
+back_rect = None
+
+
+
 SCREEN_WIDTH, SCREEN_HEIGHT = ROOM_WIDTH + INVENTORY_WIDTH, ROOM_HEIGHT
 screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
 pygame.display.set_caption("Mystery Room")
@@ -120,43 +128,69 @@ def set_message(text, frames=120):
 
 # --- OTP INPUT HANDLING (UPDATED) -------------------------------------------
 def handle_otp_keydown(event):
-    global otp_digits, keypad_active, left_door_locked, OTP_CURSOR_BLINK, left_door_unlocked_visual
-    
+    global otp_digits, keypad_active, OTP_CURSOR_BLINK
+    global left_door_locked, left_door_unlocked_visual
+    global tv_pin_unlocked, pin_mode
+
     if not keypad_active:
         return
-    
+
     current_pos = next((i for i, d in enumerate(otp_digits) if d == ""), 3)
-    
+
     if event.key in (pygame.K_0, pygame.K_1, pygame.K_2, pygame.K_3,
                      pygame.K_4, pygame.K_5, pygame.K_6, pygame.K_7,
                      pygame.K_8, pygame.K_9):
         if current_pos < 4:
             otp_digits[current_pos] = event.unicode
             OTP_CURSOR_BLINK = 0
-            
+
     elif event.key == pygame.K_BACKSPACE:
-        if current_pos >= 0:
-            otp_digits[current_pos] = ""
-    
-    elif event.key == pygame.K_RETURN or event.key == pygame.K_KP_ENTER:
+        if current_pos > 0:
+            otp_digits[current_pos - 1] = ""
+
+    elif event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
         code = "".join(otp_digits)
+
         if len(code) == 4:
-            if code == CORRECT_CODE:
-                left_door_locked = False
-                left_door_unlocked_visual = True  # NEW: Show left_door.png
-                set_message("Door unlocked! ✓", 180)
-            else:
-                set_message("Wrong code! ❌", 120)
-                otp_digits = ["", "", "", ""]
+            # ----- DOOR PIN -----
+            if pin_mode == "DOOR":
+                if code == CORRECT_CODE:
+                    left_door_locked = False
+                    left_door_unlocked_visual = True
+                    set_message("Door unlocked! 🚪", 180)
+                else:
+                    set_message("Wrong door code ❌", 120)
+
+            # ----- TV PIN -----
+            elif pin_mode == "TV":
+                if code == CORRECT_CODE:
+                    tv_state = "UNLOCKED"
+                    set_message("TV unlocked 📺", 180)
+                else:
+                    set_message("Wrong TV PIN ❌", 120)
+
+        # reset after submit
+        otp_digits = ["", "", "", ""]
         keypad_active = False
+        pin_mode = None
+
 
 # --- COMPLETE CLICK HANDLING -------------------------------------------------
 def handle_click(pos):
+    global tv_state, pin_mode, keypad_active, otp_digits
     global drawer_open, hammer_taken, selected_item, keypad_active, door_just_touched
     global restart_rotating, restart_angle, restart_frames
     global glass_case_intact, room_power_on, tv_pin_unlocked, left_door_unlocked_visual
     
     x, y = pos
+    # ❌ CLOSE PIN PANEL
+    if keypad_active and back_rect and back_rect.collidepoint(pos):
+        keypad_active = False
+        otp_digits = ["", "", "", ""]
+        pin_mode = None
+        set_message("PIN closed", 60)
+        return
+
     
     # RETURN BUTTON (darkness screen)
     if RETURN_BUTTON_RECT.collidepoint(pos) and not room_power_on:
@@ -182,24 +216,30 @@ def handle_click(pos):
         # KEYPAD
         if KEYPAD_RECT.collidepoint(pos):
             stop_foreground_sounds()
-            keypad_active = not keypad_active
-            if not keypad_active:
-                otp_digits = ["", "", "", ""]
+            pin_mode = "DOOR"
+            keypad_active = True
+            otp_digits = ["", "", "", ""]
+            set_message("Enter door code", 120)
             return
-        
+
         # **MIDDLE RECT** (NEW)
         if MIDDLE_RECT.collidepoint(pos):
-            tv_pin_unlocked = True
-            set_message("Panel activated! 📺", 120)
+            tv_state = "IMAGE"
+            set_message("TV powered on 📺", 120)
             return
+
+
         
         # **RIGHT DOOR TV RECT** (NEW)
-        if RIGHT_DOOR_TV_RECT.collidepoint(pos):
-            if tv_pin_unlocked:
-                set_message("TV PIN panel! 🔍", 120)
-            else:
-                set_message("Locked panel.", 80)
+        # CLICK TV SCREEN TO ENTER PIN
+        if RIGHT_DOOR_TV_RECT.collidepoint(pos) and tv_state == "IMAGE":
+            tv_state = "PIN"
+            pin_mode = "TV"
+            keypad_active = True
+            otp_digits = ["", "", "", ""]
+            set_message("Enter TV PIN", 120)
             return
+
         
         # **GLASS CASE / SWITCH**
         if GLASS_CASE_RECT.collidepoint(pos):
@@ -359,10 +399,12 @@ while running:
                 screen.blit(digit_surf, (box_x + 3, KEYPAD_RECT.y + 12))
         
         # **TV PIN PANEL** (NEW)
-        if tv_pin_unlocked:
+        # --- TV DISPLAY ---
+        if tv_state in ("IMAGE", "PIN", "UNLOCKED"):
             screen.blit(tv_pin_img, RIGHT_DOOR_TV_RECT.topleft)
         else:
-            pygame.draw.rect(screen, (100, 100, 100), RIGHT_DOOR_TV_RECT, 0)
+            pygame.draw.rect(screen, (80, 80, 80), RIGHT_DOOR_TV_RECT, 0)
+
         
         # **GLASS CASE**
         if glass_case_intact:
