@@ -180,9 +180,16 @@ while running:
             elif CHECK_RECT.collidepoint(event.pos):
                 ok, bad_cells = validate_4x4(grid)
                 if ok:
-                    current_key = random.randint(1000, 9999)
-                    message = f"Congratulation and your lock key: {current_key}"
+                    message = "Sudoku Solved!"
                     message_color = (0, 255, 0)
+
+                    draw_grid()
+                    pygame.display.flip()
+                    pygame.time.delay(800)
+
+                    pygame.quit()
+                    sys.exit(0)   # ✅ SUCCESS → return TRUE to main.py
+
                 else:
                     message = "Repeated / wrong numbers!"
                     message_color = (255, 80, 80)
@@ -203,4 +210,5 @@ while running:
     draw_grid()
 
 pygame.quit()
-sys.exit()
+sys.exit(1)       # ❌ failed / closed without solving
+

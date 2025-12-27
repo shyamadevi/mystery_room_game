@@ -4,6 +4,7 @@ import math
 import cv2
 import subprocess
 
+#import cv2
 
 pygame.init()
 pygame.mixer.init(frequency=22050, size=-16, channels=2, buffer=512)
@@ -12,6 +13,8 @@ pygame.mixer.init(frequency=22050, size=-16, channels=2, buffer=512)
 ROOM_WIDTH, ROOM_HEIGHT = 1152, 768
 INVENTORY_WIDTH = 200
 INVENTORY_AREA_X = ROOM_WIDTH
+
+right_door_unlocked = False
 
 pin_mode = None  
 # can be: None, "DOOR", "TV"
@@ -78,6 +81,14 @@ RETURN_BUTTON_RECT = pygame.Rect(SCREEN_WIDTH - 120, 200, 60, 40)
 # --- SCALE SPRITES ----------------------------------------------------------
 DRAWER_OPEN_IMG = pygame.transform.scale(DRAWER_OPEN_IMG, (DRAWER_RECT.width, DRAWER_RECT.height))
 HAMMER_IMG = pygame.transform.scale(HAMMER_IMG, (HAMMER_RECT.width, HAMMER_RECT.height))
+
+#RIGHT DOOR IMAGE WHEN OPEN
+RIGHT_DOOR_OPEN_IMG = pygame.image.load("assets/images/right_door.png").convert_alpha()
+RIGHT_DOOR_OPEN_IMG = pygame.transform.scale(
+    RIGHT_DOOR_OPEN_IMG,
+    (RIGHT_DOOR_RECT.width, RIGHT_DOOR_RECT.height)
+)
+
 
 # --- GAME STATE + ALL NEW STATES ---------------------------------------------
 def reset_game():
@@ -174,7 +185,12 @@ def handle_otp_keydown(event):
                     set_message("TV unlocked 📺", 180)
 
                     # ▶ RUN SUDOKU ONLY ONCE
-                    subprocess.Popen(["python", "sudoku.py"])
+                    result = subprocess.run(["python", "sudoku.py"])
+
+                    if result.returncode == 0:
+                            right_door_unlocked = True
+                            set_message("Right door unlocked! 🚪", 180)
+
 
                 else:
                     set_message("Wrong TV PIN ❌", 120)
@@ -303,8 +319,15 @@ def handle_click(pos):
             if not door_just_touched:
                 DOOR_KNOCK_SOUND.play()
                 door_just_touched = True
-            set_message("The door is locked. 🔒", 120)
+
+            if right_door_unlocked:
+                set_message("The door opens! 🚪", 180)
+                # 👉 here you can trigger next level / ending
+            else:
+                set_message("The door is locked. 🔒", 120)
+
             return
+
     
     # Inventory
     else:
@@ -420,8 +443,8 @@ while running:
         # --- TV DISPLAY ---
         if tv_state in ("IMAGE", "PIN", "UNLOCKED"):
             screen.blit(tv_pin_img, RIGHT_DOOR_TV_RECT.topleft)
-        else:
-            pygame.draw.rect(screen, (80, 80, 80), RIGHT_DOOR_TV_RECT, 0)
+        # else:
+        #     pygame.draw.rect(screen, (80, 80, 80), RIGHT_DOOR_TV_RECT, 0)
 
         
         # **GLASS CASE**
