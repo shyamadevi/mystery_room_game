@@ -83,8 +83,9 @@ def reset_game():
     global selected_item, keypad_active, otp_digits, door_just_touched
     global restart_rotating, restart_angle, restart_frames, restart_hover, tooltip_timer
     global glass_case_intact, room_power_on
-    global tv_pin_unlocked, left_door_unlocked_visual  # NEW
-    
+    global tv_pin_unlocked, left_door_unlocked_visual
+    global tv_state   # ⭐ ADD THIS
+
     drawer_open = False
     hammer_taken = False
     left_door_locked = True
@@ -101,8 +102,11 @@ def reset_game():
     tooltip_timer = 0
     glass_case_intact = True
     room_power_on = True
-    tv_pin_unlocked = False  # NEW
-    left_door_unlocked_visual = False  # NEW
+    tv_pin_unlocked = False
+    left_door_unlocked_visual = False
+
+    tv_state = "OFF"   # ⭐ THIS LINE FIXES EVERYTHING
+
 
 # Initialize
 reset_game()
@@ -184,12 +188,19 @@ def handle_click(pos):
     
     x, y = pos
     # ❌ CLOSE PIN PANEL
+    # ❌ CLOSE PIN PANEL
     if keypad_active and back_rect and back_rect.collidepoint(pos):
+
+    # if PIN was opened from TV → hide TV image
+        if pin_mode == "TV":
+            tv_state = "OFF"
+
         keypad_active = False
         otp_digits = ["", "", "", ""]
         pin_mode = None
         set_message("PIN closed", 60)
         return
+
 
     
     # RETURN BUTTON (darkness screen)
