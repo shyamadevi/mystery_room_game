@@ -9,12 +9,7 @@ pygame.mixer.init(frequency=22050, size=-16, channels=2, buffer=512)
 # --- CONFIG -----------------------------------------------------------------
 ROOM_WIDTH, ROOM_HEIGHT = 1152, 768
 INVENTORY_WIDTH = 200
-INVENTORY_AREA_X = ROOM_WIDTH  # Fixed missing variable
-#tv 
-TV_RECT = pygame.Rect(665, 255, 220, 155)
-TV_FRAME_RECT = pygame.Rect(635, 255, 240, 180)
-TV_SCREEN_RECT = pygame.Rect(680, 285, 150, 115)
-TV_TILT_ANGLE = -2
+INVENTORY_AREA_X = ROOM_WIDTH
 
 SCREEN_WIDTH, SCREEN_HEIGHT = ROOM_WIDTH + INVENTORY_WIDTH, ROOM_HEIGHT
 screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
@@ -26,24 +21,25 @@ BG_PATH = os.path.join("assets", "images", "room.png")
 room_bg_raw = pygame.image.load(BG_PATH).convert()
 room_bg = pygame.transform.scale(room_bg_raw, (ROOM_WIDTH, ROOM_HEIGHT))
 
-# --- LOAD NEW IMAGES (GLASS/SWITCH FEATURES) --------------------------------
+# --- LOAD ALL IMAGES --------------------------------------------------------
 PIN_IMG_PATH = os.path.join("assets", "images", "pin.png")
-SWITCH_IMG_PATH = os.path.join("assets", "images", "switch.png")  # Your broken glass
+SWITCH_IMG_PATH = os.path.join("assets", "images", "switch.png")
+TV_PIN_IMG_PATH = os.path.join("assets", "images", "tv_pin.png")  # NEW
+LEFT_DOOR_IMG_PATH = os.path.join("assets", "images", "left_door.png")  # NEW
 
 pin_img_raw = pygame.image.load(PIN_IMG_PATH).convert()
 pin_img = pygame.transform.scale(pin_img_raw, (ROOM_WIDTH, ROOM_HEIGHT))
 switch_img_raw = pygame.image.load(SWITCH_IMG_PATH).convert_alpha()
-switch_img = pygame.transform.scale(switch_img_raw, (25, 45))  # Match glass rect
+switch_img = pygame.transform.scale(switch_img_raw, (25, 45))
+
+# NEW IMAGES
+tv_pin_img_raw = pygame.image.load(TV_PIN_IMG_PATH).convert_alpha()
+tv_pin_img = pygame.transform.scale(tv_pin_img_raw, (85, 70))  # Match RIGHT_DOOR_TV_RECT
+left_door_img_raw = pygame.image.load(LEFT_DOOR_IMG_PATH).convert_alpha()
+left_door_img = pygame.transform.scale(left_door_img_raw, (280, 360))  # Match LEFT_DOOR_RECT
 
 DRAWER_OPEN_IMG = pygame.image.load(os.path.join("assets", "images", "drawer.png")).convert_alpha()
 HAMMER_IMG = pygame.image.load(os.path.join("assets", "images", "hammer.png")).convert_alpha()
-
-#---LOAD TV FRAMES --------------------------------------------------------
-tv_frame = pygame.image.load(os.path.join("assets", "images", "tv_frame.png")).convert_alpha()
-tv_frame = pygame.transform.scale(tv_frame, TV_FRAME_RECT.size)
-
-#LOAD VIDEO
-video = cv2.VideoCapture(os.path.join("assets", "videos", "tv.mp4"))
 
 # --- LOAD SOUNDS -------------------------------------------------------------
 DRAWER_SOUND = pygame.mixer.Sound(os.path.join("assets", "images", "drowerOpenSound.mp3"))
@@ -53,27 +49,33 @@ DRAWER_SOUND.set_volume(0.6)
 DOOR_KNOCK_SOUND.set_volume(0.7)
 HORROR_SOUND.set_volume(0.3)
 
-# --- INTERACTIVE OBJECTS + NEW GLASS CASE -----------------------------------
+# --- ALL INTERACTIVE OBJECTS -------------------------------------------------
 KEYPAD_RECT = pygame.Rect(160, 260, 60, 80)
 DRAWER_RECT = pygame.Rect(550, 370, 140, 100)
 HAMMER_RECT = pygame.Rect(590, 400, 40, 20)
-LEFT_DOOR_RECT = pygame.Rect(110, 130, 160, 340)
-GLASS_CASE_RECT = pygame.Rect(295, 290, 40, 70)  # NEW: Right side of left door
+LEFT_DOOR_RECT = pygame.Rect(13, 130, 160, 340)
+GLASS_CASE_RECT = pygame.Rect(295, 290, 40, 70)
 RIGHT_DOOR_RECT = pygame.Rect(930, 230, 140, 280)
+
+# NEW RECTS
+MIDDLE_RECT = pygame.Rect(580, 550, 80, 50)  # Center room
+RIGHT_DOOR_TV_RECT = pygame.Rect(745, 332, 100, 80)  # Left of right door
+
 INVENTORY_SLOT_RECT = pygame.Rect(ROOM_WIDTH + 60, 80, 80, 80)
 RESTART_RECT = pygame.Rect(10, 10, 40, 40)
-RETURN_BUTTON_RECT = pygame.Rect(SCREEN_WIDTH - 120, 200, 60, 40)  # Lights on button
+RETURN_BUTTON_RECT = pygame.Rect(SCREEN_WIDTH - 120, 200, 60, 40)
 
 # --- SCALE SPRITES ----------------------------------------------------------
 DRAWER_OPEN_IMG = pygame.transform.scale(DRAWER_OPEN_IMG, (DRAWER_RECT.width, DRAWER_RECT.height))
 HAMMER_IMG = pygame.transform.scale(HAMMER_IMG, (HAMMER_RECT.width, HAMMER_RECT.height))
 
-# --- GAME STATE + NEW GLASS STATES ------------------------------------------
+# --- GAME STATE + ALL NEW STATES ---------------------------------------------
 def reset_game():
     global drawer_open, hammer_taken, left_door_locked, message, message_timer
     global selected_item, keypad_active, otp_digits, door_just_touched
     global restart_rotating, restart_angle, restart_frames, restart_hover, tooltip_timer
-    global glass_case_intact, glass_switch_triggered, room_power_on  # NEW
+    global glass_case_intact, room_power_on
+    global tv_pin_unlocked, left_door_unlocked_visual  # NEW
     
     drawer_open = False
     hammer_taken = False
@@ -89,9 +91,10 @@ def reset_game():
     restart_frames = 0
     restart_hover = False
     tooltip_timer = 0
-    glass_case_intact = True      # Glass not broken
-    glass_switch_triggered = False # Switch not flipped
-    room_power_on = True          # Lights on
+    glass_case_intact = True
+    room_power_on = True
+    tv_pin_unlocked = False  # NEW
+    left_door_unlocked_visual = False  # NEW
 
 # Initialize
 reset_game()
@@ -99,10 +102,8 @@ FONT = pygame.font.SysFont(None, 32)
 FONT_SMALL = pygame.font.SysFont(None, 24)
 FONT_TINY = pygame.font.SysFont(None, 20)
 FONT_OTP = pygame.font.SysFont(None, 48)
-CORRECT_CODE = "1234"
+CORRECT_CODE = "6554"
 OTP_CURSOR_BLINK = 0
-CODE_LENGTH = 4  # Fixed missing variable
-current_code = ""  # Fixed missing variable
 
 HORROR_SOUND.play(loops=-1)
 
@@ -117,9 +118,9 @@ def set_message(text, frames=120):
     message = text
     message_timer = frames
 
-# --- OTP INPUT HANDLING (Fixed for your OTP array) --------------------------
+# --- OTP INPUT HANDLING (UPDATED) -------------------------------------------
 def handle_otp_keydown(event):
-    global otp_digits, keypad_active, left_door_locked, OTP_CURSOR_BLINK
+    global otp_digits, keypad_active, left_door_locked, OTP_CURSOR_BLINK, left_door_unlocked_visual
     
     if not keypad_active:
         return
@@ -142,38 +143,18 @@ def handle_otp_keydown(event):
         if len(code) == 4:
             if code == CORRECT_CODE:
                 left_door_locked = False
+                left_door_unlocked_visual = True  # NEW: Show left_door.png
                 set_message("Door unlocked! ✓", 180)
             else:
                 set_message("Wrong code! ❌", 120)
                 otp_digits = ["", "", "", ""]
         keypad_active = False
 
-# --- TV DRAWING (unchanged) -------------------------------------------------
-def draw_tv():
-    ret, frame = video.read()
-    if not ret:
-        video.set(cv2.CAP_PROP_POS_FRAMES, 0)
-        ret, frame = video.read()
-    
-    frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-    frame = cv2.resize(frame, TV_SCREEN_RECT.size)
-    frame = frame.swapaxes(0, 1)
-    video_surface = pygame.surfarray.make_surface(frame)
-    
-    video_surface = pygame.transform.rotozoom(video_surface, TV_TILT_ANGLE, 1)
-    frame_surface = pygame.transform.rotozoom(tv_frame, TV_TILT_ANGLE, 1)
-    
-    video_rect = video_surface.get_rect(center=TV_SCREEN_RECT.center)
-    frame_rect = frame_surface.get_rect(center=TV_FRAME_RECT.center)
-    
-    screen.blit(video_surface, video_rect)
-    screen.blit(frame_surface, frame_rect)
-
-# --- UPDATED CLICK HANDLING - FIXED GLASS LOGIC ----------------------------
+# --- COMPLETE CLICK HANDLING -------------------------------------------------
 def handle_click(pos):
     global drawer_open, hammer_taken, selected_item, keypad_active, door_just_touched
     global restart_rotating, restart_angle, restart_frames
-    global glass_case_intact, glass_switch_triggered, room_power_on
+    global glass_case_intact, room_power_on, tv_pin_unlocked, left_door_unlocked_visual
     
     x, y = pos
     
@@ -206,24 +187,32 @@ def handle_click(pos):
                 otp_digits = ["", "", "", ""]
             return
         
-        # **FIXED GLASS CASE / SWITCH - SHOWS pin.png EVERY TIME**
+        # **MIDDLE RECT** (NEW)
+        if MIDDLE_RECT.collidepoint(pos):
+            tv_pin_unlocked = True
+            set_message("Panel activated! 📺", 120)
+            return
+        
+        # **RIGHT DOOR TV RECT** (NEW)
+        if RIGHT_DOOR_TV_RECT.collidepoint(pos):
+            if tv_pin_unlocked:
+                set_message("TV PIN panel! 🔍", 120)
+            else:
+                set_message("Locked panel.", 80)
+            return
+        
+        # **GLASS CASE / SWITCH**
         if GLASS_CASE_RECT.collidepoint(pos):
             if glass_case_intact and selected_item == "hammer":
-                # Step 1: BREAK GLASS
                 glass_case_intact = False
                 stop_foreground_sounds()
                 set_message("Glass broken! 💥", 120)
-            elif not glass_case_intact:  # ANY click after glass broken → pin.png
+            elif not glass_case_intact:
                 room_power_on = False
                 set_message("Lights OFF! 🔌", 180)
             else:
                 set_message("Glass case. Use hammer?", 120)
             return
-
-        
-        # Rest of your click handlers (unchanged)...
-        # Hammer, Drawer, Doors, Inventory...
-
         
         # Hammer
         if drawer_open and not hammer_taken and HAMMER_RECT.collidepoint(pos):
@@ -279,7 +268,6 @@ while running:
         if event.type == pygame.QUIT:
             DOOR_KNOCK_SOUND.stop()
             HORROR_SOUND.stop()
-            video.release()
             running = False
         elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             handle_click(event.pos)
@@ -315,7 +303,7 @@ while running:
         if door_just_touched:
             door_just_touched = False
         
-        # Restart button (your rotation code)
+        # Restart button
         cx, cy = RESTART_RECT.center
         radius_outer = 16
         thickness = 4
@@ -348,17 +336,16 @@ while running:
             pygame.draw.rect(screen, (255, 255, 255), tooltip_rect, 2)
             screen.blit(FONT_SMALL.render("Restart Game", True, (255, 255, 255)), (60, 15))
         
-        # TV (always draws)
-        draw_tv()
+        # DEBUG OUTLINES (REMOVE LATER)
+        pygame.draw.rect(screen, (255, 0, 0), DRAWER_RECT, 2)           # Red: Drawer
+        pygame.draw.rect(screen, (0, 255, 0), LEFT_DOOR_RECT, 2)        # Green: Left door
+        pygame.draw.rect(screen, (255, 128, 255), GLASS_CASE_RECT, 3)   # Purple: Glass
+        pygame.draw.rect(screen, (0, 0, 255), RIGHT_DOOR_RECT, 2)       # Blue: Right door
+        pygame.draw.rect(screen, (255, 255, 0), KEYPAD_RECT, 3)         # Yellow: Keypad
+        pygame.draw.rect(screen, (0, 255, 255), MIDDLE_RECT, 2)         # Cyan: Middle
+        pygame.draw.rect(screen, (255, 0, 255), RIGHT_DOOR_TV_RECT, 2)  # Magenta: TV panel
         
-        # Debug outlines + GLASS (purple)
-        pygame.draw.rect(screen, (255, 0, 0), DRAWER_RECT, 2)
-        pygame.draw.rect(screen, (0, 255, 0), LEFT_DOOR_RECT, 2)
-        pygame.draw.rect(screen, (255, 128, 255), GLASS_CASE_RECT, 3)  # Purple glass
-        pygame.draw.rect(screen, (0, 0, 255), RIGHT_DOOR_RECT, 2)
-        pygame.draw.rect(screen, (255, 255, 0), KEYPAD_RECT, 3)
-        
-        # **SMALL KEYPAD**
+        # SMALL KEYPAD
         pygame.draw.rect(screen, (255, 255, 0), KEYPAD_RECT, 0)
         pygame.draw.rect(screen, (0, 0, 0), KEYPAD_RECT, 3)
         small_box_w, small_box_h = 12, 16
@@ -371,15 +358,21 @@ while running:
                 digit_surf = FONT_TINY.render(otp_digits[i], True, (255, 255, 255))
                 screen.blit(digit_surf, (box_x + 3, KEYPAD_RECT.y + 12))
         
-        
-        if glass_case_intact:
-            # Just the purple debug rect (remove when ready)
-            pass  # No white overlay anymore!
+        # **TV PIN PANEL** (NEW)
+        if tv_pin_unlocked:
+            screen.blit(tv_pin_img, RIGHT_DOOR_TV_RECT.topleft)
         else:
-            screen.blit(switch_img, GLASS_CASE_RECT.topleft)  # Your switch.png
-            # screen.blit(FONT_SMALL.render("SWITCH", True, (255, 255, 0)), (GLASS_CASE_RECT.x - 25, GLASS_CASE_RECT.y + 40))
-
-
+            pygame.draw.rect(screen, (100, 100, 100), RIGHT_DOOR_TV_RECT, 0)
+        
+        # **GLASS CASE**
+        if glass_case_intact:
+            pass
+        else:
+            screen.blit(switch_img, GLASS_CASE_RECT.topleft)
+        
+        # **LEFT DOOR IMAGE** (NEW)
+        if left_door_unlocked_visual:
+            screen.blit(left_door_img, LEFT_DOOR_RECT.topleft)
         
         # Drawer + hammer
         if drawer_open:
@@ -429,7 +422,7 @@ while running:
                 elif current_box and (OTP_CURSOR_BLINK % 40 < 20):
                     screen.blit(FONT_OTP.render("|", True, (0, 200, 255)), (box_x + 25, panel_rect.y + 38))
     
-    # Messages (only when lights on)
+    # Messages
     if message and message_timer > 0 and room_power_on:
         screen.blit(FONT.render(message, True, (255, 255, 255)), (40, SCREEN_HEIGHT - 50))
         message_timer -= 1
